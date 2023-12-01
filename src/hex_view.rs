@@ -95,6 +95,7 @@ pub struct HexView {
     pub num_rows: u32,
     pub bytes_per_row: usize,
     pub cur_pos: usize,
+    pub overflow_pos: isize,
     pub pos_locked: bool,
     pub selection: HexViewSelection,
     pub cursor_pos: Option<usize>,
@@ -114,6 +115,7 @@ impl Default for HexView {
             num_rows: 0,
             bytes_per_row: 0,
             cur_pos: 0,
+            overflow_pos: 0,
             pos_locked: false,
             selection: HexViewSelection::default(),
             cursor_pos: None,
@@ -143,23 +145,29 @@ impl HexView {
         }
     }
 
+    fn last_line_start_address(&self) -> usize {
+        (self.file.data.len() / self.bytes_per_row) * self.bytes_per_row
+    }
+
     pub fn set_cur_pos(&mut self, val: usize) {
         if self.pos_locked {
             return;
         }
-        let last_line_start_address =
-            (self.file.data.len() / self.bytes_per_row) * self.bytes_per_row;
-        self.cur_pos = val.clamp(0, last_line_start_address);
+        self.cur_pos = val.clamp(0, self.last_line_start_address());
     }
 
     pub fn adjust_cur_pos(&mut self, delta: isize) {
         if self.pos_locked {
             return;
         }
-        let last_line_start_address =
-            (self.file.data.len() / self.bytes_per_row) * self.bytes_per_row;
-        self.cur_pos =
-            (self.cur_pos as isize + delta).clamp(0, last_line_start_address as isize) as usize;
+
+        let wanted_byte_number = self.cur_pos as isize + self.overflow_pos + delta;
+        let actual_byte_number =
+            wanted_byte_number.clamp(0, self.last_line_start_address() as isize);
+
+        self.overflow_pos = wanted_byte_number - actual_byte_number;
+
+        self.cur_pos = actual_byte_number as usize;
     }
 
     pub fn bytes_per_screen(&self) -> usize {
